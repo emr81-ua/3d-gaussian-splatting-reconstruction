@@ -1,0 +1,12 @@
+{
+  "experiment_name": "fullbody_60_remy",
+  "model_name": "remy.fbx",
+  "output_root": "pruebas",
+  "num_cameras_per_row": 15,
+  "radius": 6.5,
+  "vertical_offsets": [1.0, 2.0, 3.0, 4.0],
+  "target_heights": [2.0, 2.0, 2.0, 2.0],
+  "lens_mm": 28.0,
+  "resolution_x": 1920,
+  "resolution_y": 1080
+}

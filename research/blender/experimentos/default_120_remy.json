@@ -1,0 +1,12 @@
+{
+  "experiment_name": "default_120_remy",
+  "model_name": "remy.fbx",
+  "output_root": "pruebas",
+  "num_cameras_per_row": 30,
+  "radius": 4.5,
+  "vertical_offsets": [0.5, 2.0, 3.5, 4.5],
+  "target_heights": [0.8, 2.0, 3.5, 3.5],
+  "lens_mm": 50.0,
+  "resolution_x": 1920,
+  "resolution_y": 1080
+}

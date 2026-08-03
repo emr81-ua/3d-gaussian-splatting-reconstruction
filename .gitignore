@@ -1,0 +1,27 @@
+# Pipeline output
+output/
+salida/
+
+# External tools (installed separately, huge)
+tools/
+herramientas/
+
+# Generated 3D models (large)
+*.ply
+!examples/**/*.ply
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# COLMAP temp
+.colmap_tmp_*/
+.unzip_*/
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

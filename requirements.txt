@@ -1,0 +1,8 @@
+# reconstruct.py uses only the Python standard library -- nothing to pip install.
+#
+# The pipeline relies on two external tools, installed separately:
+#   - COLMAP (CUDA build) ....... https://colmap.github.io/
+#   - LichtFeld Studio .......... https://github.com/MrNeRF/LichtFeld-Studio
+#
+# The optional research/ scripts may need extra packages (numpy, Pillow),
+# but they are not required to run the main pipeline.
