@@ -22,6 +22,16 @@
 
 ---
 
+## 🌐 Pruébalo en el navegador — sin instalar nada
+
+Sube un `.zip` de fotos y obtén un modelo 3D, ejecutándose en la GPU **gratuita** de Google. No hay que instalar nada.
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/emr81-ua/3d-gaussian-splatting-reconstruction/blob/main/colab/reconstruccion_3d.ipynb)
+
+*(El Colab usa el entrenador `splatfacto` de [nerfstudio](https://docs.nerf.studio/) para poder correr gratis en la nube; el pipeline de escritorio de abajo usa LichtFeld Studio.)*
+
+---
+
 ## ✨ Qué hace
 
 ```bash
