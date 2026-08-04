@@ -22,16 +22,6 @@
 
 ---
 
-## 🌐 Try it in your browser — no install
-
-Upload a `.zip` of photos and get a 3D model, running on Google's **free** GPU. Nothing to install.
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/emr81-ua/3d-gaussian-splatting-reconstruction/blob/main/colab/reconstruccion_3d.ipynb)
-
-*(The Colab uses [nerfstudio](https://docs.nerf.studio/)'s `splatfacto` trainer so it can run for free in the cloud; the desktop pipeline below uses LichtFeld Studio.)*
-
----
-
 ## ✨ What it does
 
 ```bash
