@@ -85,6 +85,12 @@ Después indícale al script dónde están COLMAP y LichtFeld Studio de **cualqu
 
 ## ▶️ Uso
 
+### Interfaz gráfica
+
+¿Prefieres una ventana? Doble clic en **`gui.bat`** (o `python gui.py`): eliges las fotos, ajustas los parámetros clave de COLMAP y del Gaussian Splatting, y ves el progreso en vivo.
+
+### Línea de comandos
+
 ```bash
 # desde un zip de fotos
 python reconstruct.py mis_fotos.zip --iter 15000

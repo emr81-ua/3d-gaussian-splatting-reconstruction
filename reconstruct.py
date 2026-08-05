@@ -99,9 +99,12 @@ def log(msg: str) -> None:
     print(f"\n>>> {msg}", flush=True)
 
 
+_NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW: sin consolas extra (útil desde la GUI)
+
+
 def run(command: list[str]) -> None:
     print(f"    $ {subprocess.list2cmdline(command)}", flush=True)
-    completed = subprocess.run(command, check=False)
+    completed = subprocess.run(command, check=False, creationflags=_NO_WINDOW)
     if completed.returncode != 0:
         raise RuntimeError(f"Command failed with exit code {completed.returncode}")
 
@@ -148,7 +151,7 @@ def find_sparse_model_dir(mapper_output_dir: Path) -> Path:
 def analyze_sparse(colmap_exe: Path, sparse_dir: Path) -> dict:
     result = subprocess.run(
         [str(colmap_exe), "model_analyzer", "--path", str(sparse_dir)],
-        check=False, capture_output=True, text=True,
+        check=False, capture_output=True, text=True, creationflags=_NO_WINDOW,
     )
     text = result.stdout + result.stderr
     metrics: dict = {}
@@ -167,7 +170,9 @@ def analyze_sparse(colmap_exe: Path, sparse_dir: Path) -> dict:
 # --------------------------------------------------------------------------- #
 #  COLMAP  (parameters tuned in the thesis; work for real photos too)
 # --------------------------------------------------------------------------- #
-def run_colmap(colmap_exe: Path, image_dir: Path, dense_dir: Path) -> dict:
+def run_colmap(colmap_exe: Path, image_dir: Path, dense_dir: Path,
+               peak_threshold: float = 0.004, max_features: int = 16384,
+               matcher: str = "exhaustive") -> dict:
     tmp = dense_dir.parent / f".colmap_tmp_{uuid4().hex[:8]}"
     database = tmp / "database.db"
     mapper_out = tmp / "sparse"
@@ -179,11 +184,11 @@ def run_colmap(colmap_exe: Path, image_dir: Path, dense_dir: Path) -> dict:
         run([str(colmap_exe), "feature_extractor",
              "--database_path", str(database),
              "--image_path", str(image_dir),
-             "--SiftExtraction.peak_threshold", "0.004",
-             "--SiftExtraction.max_num_features", "16384"])
+             "--SiftExtraction.peak_threshold", str(peak_threshold),
+             "--SiftExtraction.max_num_features", str(max_features)])
 
-        log("COLMAP 2/4 - Feature matching")
-        run([str(colmap_exe), "exhaustive_matcher",
+        log(f"COLMAP 2/4 - Feature matching ({matcher})")
+        run([str(colmap_exe), f"{matcher}_matcher",
              "--database_path", str(database)])
 
         log("COLMAP 3/4 - Reconstruction (mapper)")
@@ -244,6 +249,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iter", type=int, default=15000, help="3DGS training iterations.")
     parser.add_argument("--max-gaussians", type=int, default=500000,
                         help="Cap on Gaussians (LichtFeld --max-cap). Lower it if you run out of VRAM.")
+    parser.add_argument("--peak-threshold", type=float, default=0.004,
+                        help="SIFT peak_threshold. Lower detects more features (good for low-texture).")
+    parser.add_argument("--max-features", type=int, default=16384,
+                        help="Max SIFT features per image (more = more detail, slower).")
+    parser.add_argument("--matcher", choices=["exhaustive", "sequential"], default="exhaustive",
+                        help="Feature matcher: exhaustive (unordered photos) or sequential (video/ordered).")
     parser.add_argument("--colmap-exe", type=Path, default=None)
     parser.add_argument("--lichtfeld-exe", type=Path, default=None)
     parser.add_argument("--skip-training", action="store_true", help="COLMAP only, no 3DGS training.")
@@ -276,7 +287,10 @@ def main() -> None:
         raise FileNotFoundError("No images found in the input.")
     log(f"{n} photos ready in {images_dir}")
 
-    metrics = run_colmap(colmap_exe, images_dir, dense_dir)
+    metrics = run_colmap(colmap_exe, images_dir, dense_dir,
+                         peak_threshold=args.peak_threshold,
+                         max_features=args.max_features,
+                         matcher=args.matcher)
     print(f"    Registered: {metrics.get('registered_images','?')}/{n}  |  "
           f"points: {metrics.get('points','?')}  |  "
           f"reproj. error: {metrics.get('mean_reprojection_error','?')} px")
