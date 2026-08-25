@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software or its results, please cite it as below."
+title: "Photo to 3D: a Gaussian Splatting reconstruction pipeline"
+abstract: >-
+  A one-command pipeline that turns a set of photographs into a real-time 3D
+  model by combining camera-pose estimation (COLMAP) with 3D Gaussian Splatting
+  training (LichtFeld Studio). Developed as a Bachelor's thesis at the University
+  of Alicante, together with a systematic study of how capture configuration
+  affects reconstruction quality.
+type: software
+authors:
+  - given-names: Eric
+    family-names: "Muñoz Rouillion"
+    affiliation: "University of Alicante"
+license: MIT
+repository-code: "https://github.com/emr81-ua/3d-gaussian-splatting-reconstruction"
+keywords:
+  - gaussian-splatting
+  - 3d-reconstruction
+  - computer-vision
+  - photogrammetry
+  - colmap
+  - structure-from-motion
+references:
+  - type: thesis
+    title: "Realistic 3D model reconstruction using Gaussian Splatting"
+    thesis-type: "Bachelor's thesis"
+    authors:
+      - given-names: Eric
+        family-names: "Muñoz Rouillion"
+    institution:
+      name: "University of Alicante"
+    year: 2026

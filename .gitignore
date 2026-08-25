@@ -21,6 +21,9 @@ venv/
 .unzip_*/
 *.db
 
+# GUI local settings (per-machine paths)
+.gui_config.json
+
 # OS
 .DS_Store
 Thumbs.db
