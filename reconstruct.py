@@ -255,6 +255,16 @@ def parse_args() -> argparse.Namespace:
                         help="Max SIFT features per image (more = more detail, slower).")
     parser.add_argument("--matcher", choices=["exhaustive", "sequential"], default="exhaustive",
                         help="Feature matcher: exhaustive (unordered photos) or sequential (video/ordered).")
+    parser.add_argument("--clean", action="store_true",
+                        help="Clean the sparse cloud after COLMAP (removes background/floaters). Needs numpy+scipy.")
+    parser.add_argument("--clean-min-track", type=int, default=3,
+                        help="Cleaning: min number of cameras that must see a point.")
+    parser.add_argument("--clean-max-error", type=float, default=2.0,
+                        help="Cleaning: max reprojection error (px) for a point.")
+    parser.add_argument("--clean-std", type=float, default=2.0,
+                        help="Cleaning: statistical-outlier aggressiveness (lower = stronger).")
+    parser.add_argument("--clean-crop", type=float, default=0.98,
+                        help="Cleaning: keep this radial quantile around the object center.")
     parser.add_argument("--colmap-exe", type=Path, default=None)
     parser.add_argument("--lichtfeld-exe", type=Path, default=None)
     parser.add_argument("--skip-training", action="store_true", help="COLMAP only, no 3DGS training.")
@@ -294,6 +304,19 @@ def main() -> None:
     print(f"    Registered: {metrics.get('registered_images','?')}/{n}  |  "
           f"points: {metrics.get('points','?')}  |  "
           f"reproj. error: {metrics.get('mean_reprojection_error','?')} px")
+
+    # Limpieza opcional de la nube dispersa (entre COLMAP y el entrenamiento)
+    if args.clean:
+        log("Cleaning the sparse point cloud")
+        try:
+            from clean_pointcloud import clean_sparse
+        except SystemExit as e:
+            raise RuntimeError(str(e))
+        s = clean_sparse(dense_dir / "sparse",
+                         min_track=args.clean_min_track, max_error=args.clean_max_error,
+                         std_ratio=args.clean_std, crop_quantile=args.clean_crop)
+        print(f"    Sparse cloud: {s['total']} -> {s['final']} points "
+              f"({100*s['removed']/s['total']:.1f}% removed)")
 
     if args.skip_training:
         log("Done (COLMAP only).")
