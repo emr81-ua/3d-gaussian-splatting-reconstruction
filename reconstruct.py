@@ -1,20 +1,31 @@
 """
 reconstruct.py - Full photo -> 3D model pipeline (Gaussian Splatting).
 
+Pipeline (background removal is ON by default):
+    photos -> COLMAP -> subject masks (rembg) -> 3DGS training (masked)
+           -> crop residual background -> model.ply
+
 Usage:
     python reconstruct.py <input> [options]
 
     <input>   A .zip of photos, or a folder containing photos.
 
-Options:
+Main options:
     --output DIR          Output folder (default: ./output/<name>).
     --iter N              3DGS training iterations (default 15000).
-    --max-gaussians N     Cap on the number of Gaussians (--max-cap in
-                          LichtFeld). Lower it if you run out of VRAM.
-                          Default 500000.
-    --colmap-exe PATH     Path to the COLMAP executable (auto-detected).
-    --lichtfeld-exe PATH  Path to LichtFeld-Studio (auto-detected).
+    --max-gaussians N     Cap on Gaussians (--max-cap in LichtFeld). Lower it
+                          if you run out of VRAM. Default 500000.
     --skip-training       Run COLMAP only (sparse cloud), skip 3DGS training.
+
+Background removal (on by default):
+    --no-mask             Do not segment the subject (keep the background).
+    --mask-model NAME     rembg model: 'u2net_human_seg' (people, default) or
+                          'u2net' (generic objects).
+    --mask-mode MODE      ignore | segment | alpha_consistent (default ignore).
+    --no-crop             Do not crop far floaters after training.
+    --crop-factor F       Keep Gaussians within F * camera-ring radius (0.8).
+    --crop-opacity O      Drop Gaussians below opacity O (default 0 = off; opacity
+                          pruning makes Gaussians look chunky, so keep it off).
 
 Tool detection order (COLMAP and LichtFeld):
     1. the explicit --*-exe argument
@@ -25,8 +36,13 @@ Tool detection order (COLMAP and LichtFeld):
 Output:
     <output>/images/          input photos
     <output>/dense/           COLMAP reconstruction (poses + sparse cloud)
-    <output>/dense/output/    training splats
-    <output>/model.ply        final 3DGS model (copy of the last splat)
+    <output>/dense/masks/     subject masks (when masking is enabled)
+    <output>/dense/output/    training splats (raw, before crop)
+    <output>/model.ply        final 3DGS model (masked + cropped)
+
+Extra Python dependencies for background removal:
+    pip install "rembg[cpu]" numpy scipy pillow
+    (without them the pipeline still runs; masking/crop are skipped with a note.)
 """
 from __future__ import annotations
 
@@ -223,20 +239,56 @@ def run_colmap(colmap_exe: Path, image_dir: Path, dense_dir: Path,
 # --------------------------------------------------------------------------- #
 #  LichtFeld Studio  (3DGS training)
 # --------------------------------------------------------------------------- #
-def run_training(lichtfeld_exe: Path, dense_dir: Path, iterations: int, max_gaussians: int) -> Path:
+def run_training(lichtfeld_exe: Path, dense_dir: Path, iterations: int, max_gaussians: int,
+                 mask_mode: str | None = None, invert_masks: bool = False) -> Path:
     output_dir = dense_dir / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
-    log(f"3DGS - Training in LichtFeld Studio ({iterations} iters, max {max_gaussians:,} Gaussians)")
-    run([str(lichtfeld_exe),
-         "--data-path", str(dense_dir),
-         "--output-path", str(output_dir),
-         "--iter", str(iterations),
-         "--max-cap", str(max_gaussians),
-         "--headless", "--train", "--no-splash"])
+    extra = f", masks: {mask_mode}" if mask_mode else ""
+    log(f"3DGS - Training in LichtFeld Studio ({iterations} iters, max {max_gaussians:,} Gaussians{extra})")
+    command = [str(lichtfeld_exe),
+               "--data-path", str(dense_dir),
+               "--output-path", str(output_dir),
+               "--iter", str(iterations),
+               "--max-cap", str(max_gaussians)]
+    if mask_mode:
+        command += ["--mask-mode", mask_mode]
+        if invert_masks:
+            command += ["--invert-masks"]
+    command += ["--headless", "--train", "--no-splash"]
+    run(command)
     splats = sorted(output_dir.glob("splat_*.ply"))
     if not splats:
         raise RuntimeError("Training finished but no splat_*.ply was produced.")
     return splats[-1]
+
+
+# --------------------------------------------------------------------------- #
+#  Masking (subject segmentation) + post-training crop
+# --------------------------------------------------------------------------- #
+def generate_masks(images_dir: Path, masks_dir: Path, model: str) -> dict:
+    """Segment the subject in every image into `masks/` (white = subject).
+
+    Raises RuntimeError with a friendly message if rembg is not installed."""
+    try:
+        from make_masks import make_masks
+    except ImportError as e:
+        raise RuntimeError(f"masking needs rembg + pillow ({e})")
+    try:
+        return make_masks(images_dir, masks_dir, model=model)
+    except ImportError as e:  # rembg imports lazily inside make_masks
+        raise RuntimeError(f"masking needs rembg + pillow ({e})")
+
+
+def crop_model(splat: Path, sparse_dir: Path, out: Path,
+               crop_factor: float, min_opacity: float) -> dict:
+    """Remove residual background (far floaters + near-invisible Gaussians) from
+    the trained .ply. Raises RuntimeError if numpy/scipy are missing."""
+    try:
+        from crop_splat import crop
+    except ImportError as e:
+        raise RuntimeError(f"cropping needs numpy ({e})")
+    return crop(splat, sparse_dir, crop_factor=crop_factor, min_opacity=min_opacity,
+                cluster=False, out=out)
 
 
 # --------------------------------------------------------------------------- #
@@ -255,8 +307,28 @@ def parse_args() -> argparse.Namespace:
                         help="Max SIFT features per image (more = more detail, slower).")
     parser.add_argument("--matcher", choices=["exhaustive", "sequential"], default="exhaustive",
                         help="Feature matcher: exhaustive (unordered photos) or sequential (video/ordered).")
+
+    # --- background removal (ON by default): subject masks + post-training crop ---
+    parser.add_argument("--no-mask", action="store_true",
+                        help="Disable subject masking (by default the subject is segmented so the "
+                             "background is left out of training). Needs rembg.")
+    parser.add_argument("--mask-model", default="u2net_human_seg",
+                        help="rembg model. 'u2net_human_seg' for people (default), 'u2net' for generic objects.")
+    parser.add_argument("--mask-mode", choices=["ignore", "segment", "alpha_consistent"], default="ignore",
+                        help="How LichtFeld uses the masks: 'ignore' leaves the background out of the loss (default).")
+    parser.add_argument("--invert-masks", action="store_true",
+                        help="Swap subject/background if your masks come inverted.")
+    parser.add_argument("--no-crop", action="store_true",
+                        help="Disable the post-training crop that removes far background floaters.")
+    parser.add_argument("--crop-factor", type=float, default=0.8,
+                        help="Crop: keep Gaussians within this fraction of the camera-ring radius. Lower = tighter.")
+    parser.add_argument("--crop-opacity", type=float, default=0.0,
+                        help="Crop: drop Gaussians with opacity below this (0-1). 0 = off. WARNING: pruning by "
+                             "opacity thins the surface and makes Gaussians look chunky; leave it at 0.")
+
     parser.add_argument("--clean", action="store_true",
-                        help="Clean the sparse cloud after COLMAP (removes background/floaters). Needs numpy+scipy.")
+                        help="Also clean the sparse cloud after COLMAP (init only; masking is the real background "
+                             "removal). Needs numpy+scipy.")
     parser.add_argument("--clean-min-track", type=int, default=3,
                         help="Cleaning: min number of cameras that must see a point.")
     parser.add_argument("--clean-max-error", type=float, default=2.0,
@@ -305,7 +377,7 @@ def main() -> None:
           f"points: {metrics.get('points','?')}  |  "
           f"reproj. error: {metrics.get('mean_reprojection_error','?')} px")
 
-    # Limpieza opcional de la nube dispersa (entre COLMAP y el entrenamiento)
+    # Optional: clean the sparse cloud (init only; masking below is the real background removal)
     if args.clean:
         log("Cleaning the sparse point cloud")
         try:
@@ -314,7 +386,7 @@ def main() -> None:
             raise RuntimeError(str(e))
         s = clean_sparse(dense_dir / "sparse",
                          min_track=args.clean_min_track, max_error=args.clean_max_error,
-                         std_ratio=args.clean_std, crop_quantile=args.clean_crop)
+                         std_ratio=args.clean_std, crop_factor=args.clean_crop, cluster=False)
         print(f"    Sparse cloud: {s['total']} -> {s['final']} points "
               f"({100*s['removed']/s['total']:.1f}% removed)")
 
@@ -322,14 +394,42 @@ def main() -> None:
         log("Done (COLMAP only).")
         return
 
-    splat = run_training(lichtfeld_exe, dense_dir, args.iter, args.max_gaussians)
+    # Background removal, step 1/2: segment the subject so training ignores the background
+    mask_mode = None
+    if not args.no_mask:
+        log(f"Segmenting subject with rembg ({args.mask_model}) - background removal")
+        try:
+            s = generate_masks(dense_dir / "images", dense_dir / "masks", model=args.mask_model)
+            empty = len(s.get("empty", []))
+            print(f"    Masks: {s['ok']}/{s['total']} generated"
+                  + (f"  ({empty} found no subject - check them)" if empty else ""))
+            mask_mode = args.mask_mode
+        except RuntimeError as e:
+            print(f"    ! Masking skipped: {e}")
+            print('      Install it with:  pip install "rembg[cpu]"   (or run with --no-mask)')
+
+    splat = run_training(lichtfeld_exe, dense_dir, args.iter, args.max_gaussians,
+                         mask_mode=mask_mode, invert_masks=args.invert_masks)
+
+    # Background removal, step 2/2: crop residual floaters from the trained model
     final_model = output / "model.ply"
-    shutil.copy2(splat, final_model)
+    if not args.no_crop:
+        log("Cropping residual background from the trained model")
+        try:
+            st = crop_model(splat, dense_dir / "sparse", final_model,
+                            crop_factor=args.crop_factor, min_opacity=args.crop_opacity)
+            print(f"    Model: {st['total']} -> {st['final']} Gaussians "
+                  f"({100*st['removed']/max(1,st['total']):.1f}% removed)")
+        except RuntimeError as e:
+            print(f"    ! Crop skipped: {e}")
+            shutil.copy2(splat, final_model)
+    else:
+        shutil.copy2(splat, final_model)
 
     dt = str(datetime.now() - t0).split(".")[0]
     log("PIPELINE COMPLETE")
     print(f"    3D model: {final_model}")
-    print(f"    Splat:    {splat}")
+    print(f"    Splat:    {splat}  (raw, before crop)")
     print(f"    Time:     {dt}")
 
 

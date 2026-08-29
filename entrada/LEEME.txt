@@ -1,0 +1,15 @@
+Pon aqui tu lote de fotos (jpg / png).
+
+Luego haz doble clic en  RECONSTRUIR.bat  (en la carpeta del repo).
+
+El resultado aparecera en la carpeta  salida\<fecha_hora>\  con:
+    images\       las fotos iniciales (copia de seguridad)
+    dense\        la reconstruccion de COLMAP (poses + nube)
+    dense\masks\  las mascaras del sujeto
+    model.ply     el modelo 3D final (sin fondo)
+
+Al terminar correctamente, esta carpeta "entrada" se vacia sola
+(tus fotos quedan copiadas en salida\<fecha_hora>\images\).
+
+Consejo de captura: cuerpo/objeto entero en cuadro, da la vuelta completa
+(360 grados) a 2-3 alturas, fondo liso y luz uniforme. 40-60 fotos.

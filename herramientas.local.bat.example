@@ -1,0 +1,8 @@
+@echo off
+rem ---------------------------------------------------------------------------
+rem  Copia este archivo como  herramientas.local.bat  y pon TUS rutas.
+rem  reconstruct.py las lee automaticamente (COLMAP_EXE / LICHTFELD_EXE).
+rem  El archivo herramientas.local.bat esta en .gitignore (no se sube al repo).
+rem ---------------------------------------------------------------------------
+set "COLMAP_EXE=C:\ruta\a\colmap\bin\colmap.exe"
+set "LICHTFELD_EXE=C:\ruta\a\LichtFeld-Studio\build\LichtFeld-Studio.exe"

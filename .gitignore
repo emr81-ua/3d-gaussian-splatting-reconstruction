@@ -2,6 +2,10 @@
 output/
 salida/
 
+# Input photos (drop your batch in entrada/, but don't commit it)
+entrada/*
+!entrada/LEEME.txt
+
 # External tools (installed separately, huge)
 tools/
 herramientas/
@@ -21,8 +25,8 @@ venv/
 .unzip_*/
 *.db
 
-# GUI local settings (per-machine paths)
-.gui_config.json
+# Local tool paths (per-machine, used by RECONSTRUIR.bat)
+herramientas.local.bat
 
 # OS
 .DS_Store
