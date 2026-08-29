@@ -5,8 +5,8 @@
 > Built as my Bachelor's thesis (Computer Engineering, University of Alicante). Along the way I ran a systematic study on **what actually makes a reconstruction good** — and the answer was not the one I expected. See [The finding](#-the-finding).
 
 <p align="center">
-  <img src="assets/results.gif" alt="Reconstructed 3D model rotating in real time" width="70%">
-  <br><em>⚠️ placeholder — replace <code>assets/results.gif</code> with the real capture</em>
+  <img src="assets/results.gif" alt="Reconstructed 3D model rotating in real time" width="55%">
+  <br><em>A real reconstruction (60 photos → 3D). <a href="https://emr81-ua.github.io/viewer/"><b>▶ Explore it live in your browser</b></a></em>
 </p>
 
 <p align="center">
@@ -14,6 +14,7 @@
   <br><em>Left: original. Right: 3DGS reconstruction.</em>
 </p>
 
+[![Live demo](https://img.shields.io/badge/demo-live%20in%20your%20browser-2a6df4)](https://emr81-ua.github.io/viewer/)
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/GPU-NVIDIA%20CUDA-76b900)
@@ -40,7 +41,7 @@ model.ply               your subject in 3D — no background
 - **One entry point.** A `.zip` (or folder) of photos in, a clean `model.ply` out.
 - **Background removed by default.** The subject is segmented and the background is left out of training, so the model is *just the subject* — and every Gaussian is spent on it, which raises detail.
 - **Fully automated**, no manual steps between stages.
-- Also runnable by **double-clicking** `reconstruct.bat` (Windows) or dropping a zip onto it.
+- **No commands needed** on Windows: drop your photos in `entrada/` and double-click `RECONSTRUIR.bat`.
 
 ![Pipeline](docs/pipeline.png)
 
@@ -66,7 +67,18 @@ The thesis studied how capture decisions affect reconstruction quality, using sy
 1. **More cameras is not always better.** 80 cameras registered a *lower* rate (80.0 %) than 60 cameras (86.7 %) — the geometric distribution of the views matters as much as their number.
 2. **Framing beats camera count.** Making sure the whole object is in frame (wider lens, more distance) pushed COLMAP registration to **100 %** *without adding a single camera or any extra compute*.
 
-Full write-up in the [thesis](#-thesis).
+Real numbers from the experiments (COLMAP registration on the synthetic lab):
+
+| Capture | Cameras | Registered | Rate | Sparse points | Reproj. error |
+|---|---:|---:|---:|---:|---:|
+| Camera count | 40 | 33 | 82.5 % | 15,407 | 0.44 px |
+| Camera count | 60 | 52 | 86.7 % | 21,517 | 0.26 px |
+| Camera count | 80 | 64 | 80.0 % | 24,668 | 0.22 px |
+| Camera count | 120 | 117 | 97.5 % | 37,885 | 0.24 px |
+| **Whole body framed** | 60 | 60 | **100 %** | 6,085 | 0.42 px |
+| Hemispheric rig | 60 | 60 | **100 %** | 5,284 | 0.42 px |
+
+Same 60 cameras, but **framing the whole subject takes registration from 86.7 % to 100 %**. Reprojection error stays sub-pixel (0.2–0.4 px) throughout. Full write-up in the [thesis](#-thesis).
 
 ---
 
