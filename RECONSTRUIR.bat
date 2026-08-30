@@ -33,6 +33,23 @@ rem --- Iteraciones (Enter = 15000) ---
 set "ITER=15000"
 set /p "ITER=  Iteraciones [Enter = 15000, prueba rapida = 7000]: "
 
+rem --- Tipo de reconstruccion: persona / objeto (con mascaras) o escena completa ---
+echo.
+echo   Tipo de reconstruccion:
+echo       [1] Persona          (quita el fondo con mascaras)
+echo       [2] Objeto           (quita el fondo con mascaras)
+echo       [3] Escena completa  (SIN mascaras, lo saca todo)
+set "MASKARGS=--mask-model u2net_human_seg"
+set "SUJETO=Persona"
+set "QF=SI (mascaras + recorte)"
+set "TIPO=1"
+set /p "TIPO=  Elige 1, 2 o 3 [Enter = 1 Persona]: "
+if "%TIPO%"=="2" set "MASKARGS=--mask-model u2net"
+if "%TIPO%"=="2" set "SUJETO=Objeto"
+if "%TIPO%"=="3" set "MASKARGS=--no-mask --no-crop"
+if "%TIPO%"=="3" set "SUJETO=Escena completa"
+if "%TIPO%"=="3" set "QF=NO (escena completa)"
+
 rem --- Carpeta de salida unica por fecha y hora ---
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "STAMP=%%i"
 set "OUT=%SALIDA%\%STAMP%"
@@ -41,7 +58,7 @@ echo.
 echo  ------------------------------------------------------------------
 echo   Entrada : %ENTRADA%
 echo   Salida  : %OUT%
-echo   Iter    : %ITER%    Quitar fondo: SI (mascaras + recorte)
+echo   Iter    : %ITER%    Modo: %SUJETO%    Quitar fondo: %QF%
 echo  ------------------------------------------------------------------
 echo.
 
@@ -52,13 +69,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python "%ROOT%reconstruct.py" "%ENTRADA%" --output "%OUT%" --iter %ITER%
+python "%ROOT%reconstruct.py" "%ENTRADA%" --output "%OUT%" --iter %ITER% %MASKARGS%
 set "CODE=%errorlevel%"
 
 echo.
-if "%CODE%"=="0" (
-    rem --- Limpiar la carpeta de entrada: las fotos ya estan copiadas en la salida ---
+rem --- Vaciar la carpeta de entrada al terminar (solo si las fotos ya se copiaron a la salida) ---
+if exist "%OUT%\images\*.*" (
     for %%E in (jpg jpeg png bmp tif tiff) do del /q "%ENTRADA%\*.%%E" >nul 2>&1
+    echo   Carpeta "entrada" vaciada. Copia de seguridad de las fotos en: %OUT%\images\
+    echo.
+)
+
+if "%CODE%"=="0" (
     echo ==================================================================
     echo   LISTO.  Todo esta en:
     echo   %OUT%
@@ -66,8 +88,6 @@ if "%CODE%"=="0" (
     echo       dense\       reconstruccion COLMAP ^(poses + nube^)
     echo       dense\masks\ mascaras del sujeto
     echo       model.ply    modelo 3D final ^(sin fondo^)
-    echo.
-    echo   La carpeta "entrada" se ha vaciado (los originales estan en images\).
     echo ==================================================================
     start "" explorer "%OUT%"
 ) else (

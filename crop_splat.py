@@ -91,7 +91,7 @@ def subject_center_radius(sparse_dir: Path):
 #  Recorte
 # --------------------------------------------------------------------------- #
 def crop(model_ply: Path, sparse_dir: Path, *, crop_factor=0.8, min_opacity=0.05,
-         cluster=False, out=None):
+         cluster=False, cluster_eps_factor=5.0, sor_std=0.0, knn=12, max_scale_pct=0.0, out=None):
     arr, props, header = read_ply(Path(model_ply))
     xyz = np.stack([arr["x"], arr["y"], arr["z"]], axis=1).astype(np.float64)
     N = len(arr)
@@ -128,13 +128,41 @@ def crop(model_ply: Path, sparse_dir: Path, *, crop_factor=0.8, min_opacity=0.05
         pts = xyz[idx]
         tree = cKDTree(pts)
         nn = tree.query(pts, k=2)[0][:, 1]
-        eps = float(np.median(nn)) * 5.0
+        eps = float(np.median(nn)) * cluster_eps_factor
         g = tree.sparse_distance_matrix(tree, max_distance=eps, output_type="coo_matrix")
         n_c, labels = connected_components(g, directed=False)
         if n_c > 1:
             biggest = np.bincount(labels).argmax()
-            keep[idx[labels != biggest]] = False
+            main = labels == biggest
+            # Salvaguarda: solo nos quedamos con el componente principal si es la mayoría
+            # (evita colapsar el modelo si el objeto quedó fragmentado por un eps pequeño).
+            if int(main.sum()) >= 0.5 * len(idx):
+                keep[idx[~main]] = False
+            else:
+                st["cluster_omitido"] = True
     st["tras_cluster"] = int(keep.sum())
+
+    # --- quita gaussianas gigantes (los bokeh de fondo suelen ser las más grandes) ---
+    if max_scale_pct and max_scale_pct > 0 and "scale_0" in arr.dtype.names:
+        idx = np.nonzero(keep)[0]
+        sc = np.exp(np.stack([arr["scale_0"], arr["scale_1"], arr["scale_2"]], 1).astype(np.float64)).mean(1)
+        if len(idx) > 10:
+            thr = np.percentile(sc[idx], 100.0 - max_scale_pct)
+            keep[idx[sc[idx] > thr]] = False
+    st["tras_escala"] = int(keep.sum())
+
+    # --- outliers estadísticos (SOR): quita flotantes aislados (bokeh de fondo) ---
+    if sor_std and sor_std > 0:
+        from scipy.spatial import cKDTree
+        idx = np.nonzero(keep)[0]
+        if len(idx) > knn + 1:
+            pts = xyz[idx]
+            tree = cKDTree(pts)
+            d, _ = tree.query(pts, k=knn + 1)
+            md = d[:, 1:].mean(axis=1)              # dist. media a los k vecinos
+            thr = md.mean() + sor_std * md.std()
+            keep[idx[md > thr]] = False
+    st["tras_sor"] = int(keep.sum())
 
     out = Path(out) if out else Path(model_ply).with_name(Path(model_ply).stem + "_cropped.ply")
     write_ply(out, arr[keep], props, header)
@@ -151,6 +179,11 @@ def parse_args():
     ap.add_argument("--crop-factor", type=float, default=0.8, help="Radio a conservar (fracción del anillo). Menor = más agresivo.")
     ap.add_argument("--min-opacity", type=float, default=0.05, help="Descarta gaussianas con opacidad < umbral.")
     ap.add_argument("--cluster", action="store_true", help="Además, quedarse con el clúster principal.")
+    ap.add_argument("--cluster-eps", type=float, default=5.0, help="Factor de eps para el clúster (menor = separa islas cercanas).")
+    ap.add_argument("--max-scale-pct", type=float, default=0.0, help="Quita el X%% de gaussianas mas grandes (bokeh). 0 = off.")
+    ap.add_argument("--sor", type=float, default=0.0,
+                    help="Outliers estadísticos: quita gaussianas aisladas (flotantes). Menor = más agresivo (p.ej. 1.0-2.0). 0 = off.")
+    ap.add_argument("--knn", type=int, default=12, help="Vecinos para el SOR.")
     ap.add_argument("--out", type=Path, default=None)
     return ap.parse_args()
 
@@ -161,13 +194,14 @@ def main():
     a = parse_args()
     print(f">>> Recortando {a.model_ply}")
     s = crop(a.model_ply, a.sparse, crop_factor=a.crop_factor, min_opacity=a.min_opacity,
-             cluster=a.cluster, out=a.out)
+             cluster=a.cluster, cluster_eps_factor=a.cluster_eps, sor_std=a.sor, knn=a.knn, max_scale_pct=a.max_scale_pct, out=a.out)
     print(f"    Total               : {s['total']}")
     print(f"    Tras opacidad       : {s['tras_opacidad']}")
     print(f"    Tras recorte espacial: {s['tras_espacial']}"
           + (f"   [radio={s.get('radio_recorte',0):.2f} de anillo={s.get('radio_anillo',0):.2f}]"
              if 'radio_recorte' in s else ""))
     print(f"    Tras clúster        : {s['tras_cluster']}")
+    print(f"    Tras SOR            : {s['tras_sor']}")
     print(f"    FINAL               : {s['final']}  ({100*s['removed']/max(1,s['total']):.1f}% eliminado)")
     print(f"    Guardado -> {s['out']}")
 
